@@ -96,10 +96,9 @@ match("point", trigram)
 ```
 
 ```{r}
-  en_blogs.tb %>% unnest_tokens(trigram, text, token = "ngrams", n = 3) %>%
+  test <-en_blogs.tb %>% unnest_tokens(trigram, text, token = "ngrams", n = 3) %>%
   separate(trigram, c("word1", "word2", "word3"), sep = " ")  %>%
-    drop_na() %>%
-  count(word1, word2, word3, sort = TRUE)
+    drop_na() %>% count(bigram, sort = TRUE)
 ```
 so thats kind of tricky. I cannot just exclude the stop words. Becuase tat the end i might get ask what will be the next word oafter "I want" so this i want is already excluded. Threrefore this appraoch rather askes for spped and efficiency to get the answer out, than the most correct approach to get the exact sentence.. However maybe i need to provide two pieces of code. One will be for the frequent questions - like the trigrams and the one might be for complete sentences which indeed needs to be broken down to kind of keywords. 
 So for example if the question comes "I want" I need a simple answer of the most frequent "I want" ____ answer - here is alredy the question- how do i 
@@ -110,10 +109,13 @@ stopwords_regex = paste(stopwords('en'), collapse = '\\b|\\b')
 stopwords_regex = paste0('\\b', stopwords_regex, '\\b')
 test = stringr::str_replace_all(en_blogs.tb, stopwords_regex, '')
 ```
+************
 
 ```{r}
 test <- en_blogs.tb %>% unnest_tokens( bigram,text, token = "ngrams", n = 2) %>% 
-    count(bigram, sort = TRUE) 
+    count(bigram, sort = TRUE) %>% separate(bigram, c("word1", "word2"), sep = " ")
+(grepl("of", test$word1))
+test[(grepl("fruit", test$word1)),]
 ```
 
 ```{r}
