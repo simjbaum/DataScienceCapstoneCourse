@@ -1,0 +1,291 @@
+---
+title: "Data Science Capstone - First Assignment"
+author: "Simon Baumgart"
+date: "September 29, 2019"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+## Introduction: 
+This is the first assignment of the coursera course "Data Science Capstone" offered by the Johns Hopkins University of Public Heatlh. Word prediction and autocomplete of sentences are becoming a standard for mobile devices and increasing in importantance. One tool example is SwiftKey (TM) with the development of a "smart keyboard". In this course a word prediction algorithm will be programmed and implemented into a shiny app. Data sets from blogs, Twitter and news are provided as a source. In this first assignment those data sets are explored and visualized. Further, first ideas about the word prediction algorithm and strategies "how to" are explained in the outlook.  
+
+For more information about this assignment please follow the link below: https://www.coursera.org/learn/data-science-project/peer/BRX21/milestone-report
+
+## Material: 
+Three datasets in English language are collected from blogs, twitter, news and are explored. 
+Data can be obtained from here: https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip
+
+## Data Exploration:
+```{r include = FALSE}
+library(tidytext)
+library(ggplot2)
+library(tidyverse)
+library(stringr)
+library(R.utils)
+library(ngram)
+library(dplyr)
+```
+
+```{r include = FALSE}
+en_blogs <- read_lines("inputdata/en_US/en_US.blogs.txt")
+en_twitter <- read_lines("inputdata/en_US/en_US.twitter.txt")
+en_news <- read_lines("inputdata/en_US/en_US.news.txt")
+
+combined_data <- list(en_blogs, en_news, en_twitter)
+```
+
+### line and word count
+```{r include = FALSE}
+nlinesBlogs <- countLines("inputdata/en_US/en_US.blogs.txt")
+nlinesTwitter <- countLines("inputdata/en_US/en_US.twitter.txt")
+nlinesNews <- countLines("inputdata/en_US/en_US.news.txt")
+
+nwordsBlogs  <- wordcount(en_blogs, sep = " ")
+nwordsTwitter <- wordcount(en_twitter, sep = " ")
+nwordsNews  <- wordcount(en_news, sep = " ")
+
+toplot <- tibble(counts = c(nwordsBlogs, nwordsTwitter, nwordsNews, nlinesBlogs, nlinesTwitter, nlinesNews),
+    class = as.factor(c(rep("words",3), rep("lines", 3))), 
+    medium = as.factor(c(rep(c("blogs", "twitter", "news"),2 ))))
+
+toplot$names <- paste(toplot$class, toplot$medium)
+```
+#### table 1
+```{r echo=FALSE}
+toplot
+```
+
+```{r echo=FALSE}
+ggplot(data = toplot, aes( y = counts, x = class, fill = medium)) + 
+    geom_bar(stat = "identity") + 
+    coord_flip() + 
+    facet_grid(medium ~ ., scales = "free") + 
+    ggtitle("most words are count in the blog data set")
+```
+  
+#### plot 1 
+Most words are collected from blogs. However, all sources provide over 30 million words. This should be enough to create a word predicting algorithm. Also, there is the option to pool the sources which would provide over 100 million words. 
+
+```{r echo=FALSE, warning=FALSE}
+ratio = data_frame(ratio = c(nwordsBlogs/ nlinesBlogs, nwordsNews/nlinesNews, nwordsTwitter/nlinesTwitter), media = as.factor(c("Blogs","News","Twitter")))
+ggplot(data = ratio, aes(x=media, y= ratio, fill =media)) + geom_bar(stat="identity") + ggtitle("Twitter has the lowest words per line count") + ylab("ratio of words/ lines")
+```
+  
+#### plot 2
+This information that the lowest words per line is seen in the Twitter data set might be important for further downstream analysis. 
+
+### data processing
+#### cleaning the data
+The data is transformed to all lower case and all characters not included in A-Z, a-z, 0-9 are removed. This might need to be optimized later to give the user a broader input range.  
+
+#### example output
+```{r echo=FALSE}
+variables <- list(en_blogs, en_twitter, en_news)
+variables_names <- c("en_blogs", "en_twitter", "en_news")
+
+for(i in 1:length(variables)){
+    toProcess <- variables[[i]]
+    toProcessName <- variables_names[i]
+    toProcess.tb <- tibble(line = 1:length(toProcess), text = toProcess)
+    toProcess.tb$text <- gsub("[^a-zA-Z0-9 ]", " ", toProcess.tb$text)
+    toProcess.tb$text <- str_squish(toProcess.tb$text)
+    toProcess.tb$text <- str_to_lower(toProcess.tb$text)
+    assign(paste0(toProcessName,".tb"), toProcess.tb)
+}
+
+```
+#### example output blogs
+```{r echo=FALSE}
+head(en_blogs.tb$text,2)
+```
+#### example output news
+```{r echo=FALSE}
+head(en_news.tb$text,2)
+```
+#### example output twitter 
+```{r echo=FALSE}
+head(en_twitter.tb$text,2)
+```
+
+### n-gram creation
+For the word prediction we need to know how often certain word combinations occur to give weight for the output. __The idea is to predict the next word based on the previous word(s)__. In the following, word combinations are explored and frequencies are plotted. This set of word combinations can be also called a "bag of words".  
+
+#### getting 2-gram  
+
+```{r echo=FALSE, warning=FALSE, include = FALSE}
+en_blogs.tb.sub <-sample_frac(en_blogs.tb, 0.01)
+
+plot3 <- en_blogs.tb.sub %>% unnest_tokens(bigram, text, token = "ngrams", n = 2) %>% 
+    count(bigram, sort = TRUE) %>% 
+    mutate(bigram = reorder(bigram, n)) %>%
+    filter(n > 10) %>% 
+    top_n(10) %>%
+    ggplot(aes(bigram, n)) +
+    geom_col() +
+    xlab(NULL) +
+    coord_flip() + 
+    ggtitle("top10 2-gram words in en_blogs.tb.sub")
+```
+
+```{r , echo=FALSE}
+plot3
+```
+  
+#### getting 3-gram  
+
+```{r echo=FALSE, warning=FALSE, include = FALSE}
+en_blogs.tb.sub <-sample_frac(en_blogs.tb, 0.01)
+
+plot4 <- en_blogs.tb.sub %>% unnest_tokens(bigram, text, token = "ngrams", n = 3) %>% 
+    count(bigram, sort = TRUE) %>% 
+    mutate(bigram = reorder(bigram, n)) %>%
+    drop_na() %>%
+    filter(n > 10) %>% 
+    top_n(10) %>%
+    ggplot(aes(bigram, n)) +
+    geom_col() +
+    xlab(NULL) +
+    coord_flip() + 
+    ggtitle("top10 3-gram with stop words in en_blogs.tb.sub")
+```
+  
+```{r echo=FALSE}
+plot4
+```
+
+## Outlook - building a prediction algorithm:
+With the last figure we see that the data can be structured into a frequency based format of 2-gram or 3-gram or n-grams. With this a bag or word combination is created to use the most frequent hits for the word prediction, based on the previous word. Difficulties and challenges will now occur in speed of the prediction, seize of the n-gram dictionary and the accuracy of the model. For example the next word to fill after the word "to" will have a very high error rate and will be very difficult to predict. Following websites and literature can help to search for solutions and overcome the before mentioned challenges: 
+
+https://www.coursera.org/learn/data-science-project/supplement/2IiM9/task-3-modeling
+https://www.scribd.com/doc/252462619/Hands-on-Data-Science-with-R-Text-Mining
+https://www.tidytextmining.com/tidytext.html
+https://cran.r-project.org/web/views/NaturalLanguageProcessing.html
+https://web.stanford.edu/~jurafsky/slp3/3.pdf
+
+## code book
+
+```{r eval=FALSE}
+library(tidytext)
+library(ggplot2)
+library(tidyverse)
+library(stringr)
+library(R.utils)
+library(ngram)
+library(dplyr)
+```
+
+```{r eval=FALSE}
+en_blogs <- read_lines("inputdata/en_US/en_US.blogs.txt")
+en_twitter <- read_lines("inputdata/en_US/en_US.twitter.txt")
+en_news <- read_lines("inputdata/en_US/en_US.news.txt")
+
+combined_data <- list(en_blogs, en_news, en_twitter)
+```
+
+```{r, eval=FALSE}
+nlinesBlogs <- countLines("inputdata/en_US/en_US.blogs.txt")
+nlinesTwitter <- countLines("inputdata/en_US/en_US.twitter.txt")
+nlinesNews <- countLines("inputdata/en_US/en_US.news.txt")
+
+nwordsBlogs  <- wordcount(en_blogs, sep = " ")
+nwordsTwitter <- wordcount(en_twitter, sep = " ")
+nwordsNews  <- wordcount(en_news, sep = " ")
+
+toplot <- tibble(counts = c(nwordsBlogs, nwordsTwitter, nwordsNews, nlinesBlogs, nlinesTwitter, nlinesNews),
+    class = as.factor(c(rep("words",3), rep("lines", 3))), 
+    medium = as.factor(c(rep(c("blogs", "twitter", "news"),2 ))))
+
+toplot$names <- paste(toplot$class, toplot$medium)
+toplot
+```
+
+
+```{r, eval=FALSE}
+nlinesBlogs <- countLines("inputdata/en_US/en_US.blogs.txt")
+nlinesTwitter <- countLines("inputdata/en_US/en_US.twitter.txt")
+nlinesNews <- countLines("inputdata/en_US/en_US.news.txt")
+
+nwordsBlogs  <- wordcount(en_blogs, sep = " ")
+nwordsTwitter <- wordcount(en_twitter, sep = " ")
+nwordsNews  <- wordcount(en_news, sep = " ")
+
+toplot <- tibble(counts = c(nwordsBlogs, nwordsTwitter, nwordsNews, nlinesBlogs, nlinesTwitter, nlinesNews),
+    class = as.factor(c(rep("words",3), rep("lines", 3))), 
+    medium = as.factor(c(rep(c("blogs", "twitter", "news"),2 ))))
+
+toplot$names <- paste(toplot$class, toplot$medium)
+toplot
+```
+
+```{r, eval=FALSE}
+ggplot(data = toplot, aes( y = counts, x = class, fill = medium)) + 
+    geom_bar(stat = "identity") + 
+    coord_flip() + 
+    facet_grid(medium ~ ., scales = "free") + 
+    ggtitle("label")
+
+```
+
+```{r, eval=FALSE}
+ratio = data_frame(ratio = c(nwordsBlogs/ nlinesBlogs, nwordsNews/nlinesNews, nwordsTwitter/nlinesTwitter), media = as.factor(c("Blogs","News","Twitter")))
+ratio
+ggplot(data = ratio, aes(x=media, y= ratio, fill =media)) + geom_bar(stat="identity") + ggtitle("label") + ylab("ratio of words/ lines")
+```
+
+```{r, eval=FALSE}
+start.time <- Sys.time()
+variables <- list(en_blogs, en_twitter, en_news)
+variables_names <- c("en_blogs", "en_twitter", "en_news")
+
+for(i in 1:length(variables)){
+    toProcess <- variables[[i]]
+    toProcessName <- variables_names[i]
+    toProcess.tb <- tibble(line = 1:length(toProcess), text = toProcess)
+    toProcess.tb$text <- gsub("[^a-zA-Z0-9 ]", " ", toProcess.tb$text)
+    toProcess.tb$text <- str_squish(toProcess.tb$text)
+    toProcess.tb$text <- str_to_lower(toProcess.tb$text)
+    assign(paste0(toProcessName,".tb"), toProcess.tb)
+}
+
+head(en_blogs.tb$text,2)
+head(en_news.tb$text,2)
+head(en_twitter.tb$text,2)
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+time.taken
+```
+
+```{r eval=FALSE}
+en_blogs.tb.sub <-sample_frac(en_blogs.tb, 0.01)
+
+en_blogs.tb.sub %>% unnest_tokens(bigram, text, token = "ngrams", n = 2) %>% 
+    count(bigram, sort = TRUE) %>% 
+    mutate(bigram = reorder(bigram, n)) %>%
+    filter(n > 10) %>% 
+    top_n(10) %>%
+    ggplot(aes(bigram, n)) +
+    geom_col() +
+    xlab(NULL) +
+    coord_flip() + 
+    ggtitle("top10 words with stop words in en_blogs.tb.sub")
+
+stringr::str_replace_all(string = en_blogs.tb.sub,  pattern = stopwords::stopwords(source = "smart"), replacement = '')
+```
+
+```{r eval=FALSE}
+en_blogs.tb.sub <-sample_frac(en_blogs.tb, 0.01)
+
+plot4 <- en_blogs.tb.sub %>% unnest_tokens(bigram, text, token = "ngrams", n = 3) %>% 
+    count(bigram, sort = TRUE) %>% 
+    mutate(bigram = reorder(bigram, n)) %>%
+    drop_na() %>%
+    filter(n > 10) %>% 
+    top_n(10) %>%
+    ggplot(aes(bigram, n)) +
+    geom_col() +
+    xlab(NULL) +
+    coord_flip() + 
+    ggtitle("top10 3-gram with stop words in en_blogs.tb.sub")
+```
