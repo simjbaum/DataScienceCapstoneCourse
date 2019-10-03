@@ -76,13 +76,23 @@ trigram <- en_blogs.tb %>% unnest_tokens(trigram, text, token = "ngrams", n = 3)
 end.time <- Sys.time()
 time.taken <- end.time - start.time
 time.taken
+
+start.time <- Sys.time()
+trigram <- en_blogs.tb %>% unnest_tokens(quadrigram, text, token = "ngrams", n = 4) %>% drop_na()  
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+time.taken
 ```
 
 next task is to save the ngram models 
 and then go from the size of the question to your ngram saved file - and then grep the word combination from the dictionary 
 
 ```{r}
-head(trigram)
+get.phrasetable(trigram)
+head(get.phrasetable(ngram(text, n=3)))
+head(trigram$quadrigram)
+system.time( grep("^America", trigram))
+match("point", trigram)
 ```
 
 ```{r}
