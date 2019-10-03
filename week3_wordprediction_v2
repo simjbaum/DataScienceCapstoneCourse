@@ -1,0 +1,115 @@
+---
+title: "week3 - code - preparing for the quiz"
+author: "Simon Baumgart"
+date: "September 29, 2019"
+output: html_document
+---
+https://quanteda.io/
+https://cran.r-project.org/web/packages/quanteda/vignettes/quickstart.html
+http://www.mjdenny.com/Text_Processing_In_R.html
+https://paldhous.github.io/NICAR/2019/r-text-analysis.html
+https://www.rdocumentation.org/packages/quanteda/versions/0.8.2-1/topics/bigrams
+https://www.tidytextmining.com/ngrams.html
+https://github.com/dgrtwo/widyr
+
+```{r}
+library(quanteda)
+library(tidytext)
+library(ggplot2)
+library(tidyverse)
+library(stringr)
+library(R.utils)
+library(ngram)
+```
+
+```{r}
+setwd("~/Data_Science/course 10 - Data Science Capstone/DataScienceCapstone/")
+en_blogs <- read_lines("inputdata/en_US/en_US.blogs.txt")
+en_twitter <- read_lines("inputdata/en_US/en_US.twitter.txt")
+en_news <- read_lines("inputdata/en_US/en_US.news.txt")
+
+#combined_data <- list(en_blogs, en_news, en_twitter)
+```
+Q: how many lines/ words do I have to use?
+Q: How much time do i need?
+
+subsample
+```{r}
+start.time <- Sys.time()
+variables <- list(en_blogs, en_twitter, en_news)
+variables_names <- c("en_blogs", "en_twitter", "en_news")
+
+for(i in 1:length(variables)){
+    toProcess <- variables[[i]]
+    toProcessName <- variables_names[i]
+    toProcess.tb <- tibble(line = 1:length(toProcess), text = toProcess)
+    toProcess.tb <- sample_frac(toProcess.tb, 0.1)
+    toProcess.tb$text <- gsub("[^a-zA-Z0-9\']", " ", toProcess.tb$text)
+    toProcess.tb$text <- str_squish(toProcess.tb$text)
+    toProcess.tb$text <- str_to_lower(toProcess.tb$text)
+    assign(paste0(toProcessName,".tb"), toProcess.tb)
+}
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+time.taken
+
+
+``` 
+```{r}
+head(en_blogs.tb$text)
+nrow(en_blogs.tb)
+wordcount(en_blogs.tb$text)
+```
+
+to make the code faster i have to strip of the stop words i think
+test strip of the stop words 
+one idea is to remove all the stop words from the text 
+```{r}
+start.time <- Sys.time()
+en_blogs.tb %>% unnest_tokens(trigram, text, token = "ngrams", n = 3)
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+time.taken
+
+start.time <- Sys.time()
+trigram <- en_blogs.tb %>% unnest_tokens(trigram, text, token = "ngrams", n = 3) %>% drop_na()  
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+time.taken
+```
+
+next task is to save the ngram models 
+and then go from the size of the question to your ngram saved file - and then grep the word combination from the dictionary 
+
+```{r}
+head(trigram)
+```
+
+```{r}
+  en_blogs.tb %>% unnest_tokens(trigram, text, token = "ngrams", n = 3) %>%
+  separate(trigram, c("word1", "word2", "word3"), sep = " ")  %>%
+    drop_na() %>%
+  count(word1, word2, word3, sort = TRUE)
+```
+so thats kind of tricky. I cannot just exclude the stop words. Becuase tat the end i might get ask what will be the next word oafter "I want" so this i want is already excluded. Threrefore this appraoch rather askes for spped and efficiency to get the answer out, than the most correct approach to get the exact sentence.. However maybe i need to provide two pieces of code. One will be for the frequent questions - like the trigrams and the one might be for complete sentences which indeed needs to be broken down to kind of keywords. 
+So for example if the question comes "I want" I need a simple answer of the most frequent "I want" ____ answer - here is alredy the question- how do i 
+
+```{r}
+unique(stop_words$lexicon)
+stopwords_regex = paste(stopwords('en'), collapse = '\\b|\\b')
+stopwords_regex = paste0('\\b', stopwords_regex, '\\b')
+test = stringr::str_replace_all(en_blogs.tb, stopwords_regex, '')
+```
+
+```{r}
+test <- en_blogs.tb %>% unnest_tokens( bigram,text, token = "ngrams", n = 2) %>% 
+    count(bigram, sort = TRUE) 
+```
+
+```{r}
+en_news_1 <- corpus(en_news)
+```
+```{r}
+summary(en_news_1)
+tokens(en_news_1) %>% tokens_compound(pattern = phrase(c("New York City", "United States")))
+```
