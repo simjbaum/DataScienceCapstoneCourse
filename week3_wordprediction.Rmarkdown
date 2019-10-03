@@ -1,0 +1,43 @@
+---
+title: "Untitled"
+author: "Simon Baumgart"
+date: "September 29, 2019"
+output: html_document
+---
+https://quanteda.io/
+https://cran.r-project.org/web/packages/quanteda/vignettes/quickstart.html
+http://www.mjdenny.com/Text_Processing_In_R.html
+https://paldhous.github.io/NICAR/2019/r-text-analysis.html
+https://www.rdocumentation.org/packages/quanteda/versions/0.8.2-1/topics/bigrams
+https://www.tidytextmining.com/ngrams.html
+https://github.com/dgrtwo/widyr
+
+```{r}
+library(quanteda)
+library(tidytext)
+library(ggplot2)
+library(tidyverse)
+library(stringr)
+library(R.utils)
+library(ngram)
+library(dplyr)
+```
+
+```{r}
+setwd("~/Data_Science/course 10 - Data Science Capstone/DataScienceCapstone/")
+en_blogs <- read_lines("inputdata/en_US/en_US.blogs.txt")
+en_twitter <- read_lines("inputdata/en_US/en_US.twitter.txt")
+en_news <- read_lines("inputdata/en_US/en_US.news.txt")
+
+#combined_data <- list(en_blogs, en_news, en_twitter)
+```
+
+
+```{r}
+en_news_1 <- corpus(en_news)
+```
+```{r}
+summary(en_news_1)
+tokens(en_news_1) %>% tokens_compound(pattern = phrase(c("New York City", "United States")))
+```
+
