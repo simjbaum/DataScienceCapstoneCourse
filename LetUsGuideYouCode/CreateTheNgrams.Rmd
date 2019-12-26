@@ -1,0 +1,157 @@
+# download the data from:
+url = "https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip" system(paste0('mkdir data/')) system(paste0('gsutil cp https://d396qusza40orc.cloudfront.net/dsscapstone/dataset/Coursera-SwiftKey.zip data/swiftkey.zip'))
+system(paste0('unzip data/swiftkey.zip'))
+
+# load libraries
+library(tidyverse)
+library(stringr)
+library(quanteda)
+library(data.table)
+library(tictoc)
+library(foreach)
+library(doParallel)
+library(qdapDictionaries)
+
+# read data
+setwd("/home/jupyter-user/notebooks/DataScienceProject/edit/final/en_US")
+en_blogs <- read_lines("en_US.blogs.txt")
+en_twitter <- read_lines("en_US.twitter.txt")
+en_news <- read_lines("en_US.news.txt")
+
+# combine corpus using quanteda
+opt <- quanteda_options()
+opt$threads = 5
+
+en_blogs_cp <- corpus(x = en_blogs)
+en_news_cp <- corpus(x = en_news)
+en_twitter_cp <- corpus(x = en_twitter)
+rm(en_blogs,en_twitter, en_news)
+comb_corpus <- en_blogs_cp + en_news_cp + en_twitter_cp
+rm(en_blogs_cp,en_twitter_cp, en_news_cp)
+
+# reduce the size of the data for easing computation
+partToTake <- 1/3 * 4269678
+comb_corpus <- corpus_sample(x = comb_corpus,size =  partToTake)
+
+# create tokens
+comb_corpus_tokens <- tokens(x = comb_corpus, remove_numbers = T, remove_punct = T, remove_symbols = T, remove_url = T, remove_hyphens = T)
+write_rds(x = comb_corpus_tokens, path = ("./comb_corpus_halfcorpus.rds"))
+
+# create ngrams with parallel computing
+
+
+registerDoParallel(5) 
+print("enter loop")
+foreach(i=2:4, .combine=rbind) %dopar% { 
+    y <- tokens_ngrams(comb_corpus_tokens, n = i , concatenator = " ")
+    c <- dfm(y, tolower = T)
+    c.dt <- data.table(n = colSums(c), names=featnames(c))
+    write_rds(x = c.dt, path = paste0("./",i,"gram_half.rds"))
+}
+
+#bigram processing and size reduction
+bigram <- read_rds(path = "./2gram_half.rds")
+bigram <- bigram %>% as.data.table()
+bigram$ngramStem = stringi::stri_extract_first_words(bigram$names) # extract and write first word of bigram
+bigram = bigram[bigram$ngramStem %in% GradyAugmented,] # reduce size and check if it is in english dictionary
+#optinal you could reduce the size by taking n counts which are only above 1
+
+#write data
+write_rds(x = bigram, path = "./2gram_half_dictionaryProof.rds")
+toc()
+
+#trigram processing and size reduction
+trigram <- read_rds(path = "./3gram_half.rds")
+trigram <- trigram %>% as.data.table()
+trigram=trigram %>% filter(n > 2) # too many lines without filtering (16 461 208)
+trigram$firstword = stringi::stri_extract_first_words(trigram$names)
+trigram = trigram[trigram$firstword %in% GradyAugmented,] # see above
+trigram$ngramStem = word(string = trigram$names, start = 1, end = 2, sep = " ") # extract first two words of trigram for the count later and prob calculation 
+
+#write data
+write_rds(x = trigram, path = "./3gram_half_dictionaryProof.rds")
+
+#trigram processing and size reduction
+quadgram <- read_rds(path = "./4gram_half.rds")
+quadgram <- quadgram %>% as.data.table()
+quadgram=quadgram %>% filter(n > 2) # reduce the lines to be calculated
+quadgram$firstword = stringi::stri_extract_first_words(quadgram$names)
+quadgram = quadgram[quadgram$firstword %in% GradyAugmented,] # see above
+quadgram$ngramStem = word(string = quadgram$names, start = 1, end = 3, sep = " ") # extract first two words of trigram for the count later and prob calculation 
+
+
+# create a ngram data frame which includes the five most frequent words - the rest is removed
+
+gc()
+tic()
+doParallel::registerDoParallel(12)
+print("enter loop")
+
+outpath = "/subgrams/"
+gramlist=list(bigram, trigram, quadgram)
+count = 1
+
+for(gram in gramlist){
+    
+    res = foreach(i=1:26) %dopar% { # start with letter a 
+    
+        #define your gram here
+        letter <- letters[i]
+    
+        #output and parameters to track progress of computing
+        df.out <- data.frame()
+    
+        #define igram subset based on letter and ngram model
+        if(count == 1){
+            print("yes")
+            igram_letter <- gram[grep(pattern = paste0("^[",letter,"]"), x = gram$ngramStem),] 
+        } else if(count == 2){
+            igram_letter <- gram[grep(pattern = paste0("^[",letter,"]"), x = gram$ngramStem),] 
+        } else {
+            igram_letter <- gram[grep(pattern = paste0("^[",letter,"]"), x = gram$ngramStem),] 
+        }
+        
+        #iterate over the words and select the five most prevalent ones
+        
+        for(word in unique(igram_letter$ngramStem)){
+                df.intermed = igram_letter[which(word == igram_letter$ngramStem), ] # top five of firsttwowords
+                df.intermed = df.intermed %>% top_n(n = 5, wt = n)
+                df.out = rbind(df.out, df.intermed)    
+        }
+    
+        write_rds(x = df.out, path = paste0(outpath,count,"_top5_", letter,"_test_.rds"))
+        #toc()
+        gc()
+    }  
+    
+    ## combine the bigram
+    filestocombine = list.files(path = outpath, pattern = paste0(count,"_top5_"))
+    
+    df.res = data.frame()
+    for(item in filestocombine){
+        df.itermed = read_rds(paste0(outpath,item))
+        df.res = rbind(df.res, df.itermed)
+    }
+    
+    write_rds(x = df.res,
+              path= paste0(outpath,count,"top5_all.rds"))
+              
+    count = count + 1
+    #write_rds(x = res, path = paste0("./bigram_",letter,"_",count,"secondout_top5_ALL.rds"))
+}
+
+toc()
+
+
+# remove further columns to decrease the size of the ngram
+
+writeout = list(bigram, trigram, quadgram)
+writeout_names = c("bigram", "trigram", "quadgram")
+outpath = "/home/jupyter-user/notebooks/DataScienceProject/edit/final/en_US/subgrams/"
+
+count= 1
+for(file in writeout){
+    file =  file %>% arrange(desc(n)) %>% select(n, names)
+    write_rds(x = file, path = paste0(outpath, writeout_names[count], "_slim.rds") )
+    count = count +1
+}
