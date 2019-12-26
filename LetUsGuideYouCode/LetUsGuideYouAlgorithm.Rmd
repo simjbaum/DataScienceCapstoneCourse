@@ -1,0 +1,75 @@
+---
+title: "R Notebook"
+output: html_notebook
+# libraries
+
+```{r}
+library("tidyverse")
+```
+
+# load the data
+```{r}
+bigram = readRDS("data/bigram_slim.rds")
+trigram = readRDS("data/trigram_slim.rds")
+quadgram = readRDS("data/quadgram_slim.rds")
+```
+
+# search algorithm
+```{r}
+  # search algorithm
+  findnextV3 <- function(input){
+    
+    ##format input string
+    input = str_squish(input) # remove excessive white space
+    input = str_to_lower(input) # all to lower
+    input_stem = strsplit(x = input, split = " ") # split the input into words
+    input_stem = lapply(X = input_stem, function(x){gsub("[[:punct:]]", "",x)}) # remove punctuation and symbols
+    input.clean = sapply(input_stem, paste, collapse = " ")
+
+    ##words in input
+    string_length <- length(unlist(input_stem)) # how many words are in input?
+    
+    ##query with the ngram model with stupid-backoff
+    if(string_length < 2){
+      res <- bigram %>% filter(grepl(paste0("^",input.clean,"\\>"), names)) %>% head(5)
+      if(nrow(res) == 0){
+        return("no next word was found, please check spelling or if it is an english word")
+      }
+    } else if(string_length == 2){
+      res <- trigram %>% filter(grepl(paste0("^",input.clean,"\\>"), names)) %>% head(5) 
+      if(nrow(res) == 0){
+        res <- trigram %>% filter(grepl(paste0("^",input.clean,"\\>"), names)) %>% head(5)
+        if(nrow(res) == 0){
+          return("no next word was found, please check spelling or if it is an english word")
+        }
+      }
+    }
+    else{
+      if(string_length > 3){
+        input.clean <- word(input.clean, -3, -1) # get the last three words to search in your gram model
+      }
+      res <- quadgram %>% filter(grepl(paste0("^",input.clean,"\\>"), names)) %>% head(5)
+      if(nrow(res) == 0){
+        input.clean <- word(input.clean, -2, -1) # get the last three words to search in your gram model
+        res <- trigram %>% filter(grepl(paste0("^",input.clean,"\\>"), names)) %>% head(5)
+        if(nrow(res) == 0){
+          input.clean <- word(input.clean, -1) # get the last three words to search in your gram model
+          res <- bigram %>% filter(grepl(paste0("^",input.clean,"\\>"), names)) %>% head(5)
+          if(nrow(res) == 0){
+            return("no next word was found, please check spelling or if it is an english word")
+          }
+        }
+      }
+    } 
+    sumofN=sum(res$n)
+    ratios = round((res$n /sumofN),digits = 3)
+    strings = res$names
+    res = data.frame(prediction=strings, ratio=ratios, row.names = c(paste0("top",seq(nrow(res)))) )
+    return(res)
+  }
+```
+
+```{r}
+findnextV3("hello")
+```
+
